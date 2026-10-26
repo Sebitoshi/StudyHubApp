@@ -105,7 +105,7 @@ fun RoadmapsScreen() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(22.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED))))
+                        .background(Brush.linearGradient(listOf(StudyHubColors.Hero, StudyHubColors.HeroDark)))
                         .padding(horizontal = 16.dp, vertical = 16.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,11 +174,11 @@ fun RoadmapsScreen() {
 
 /** Gradientes para distinguir cada ruta en la lista. */
 private val ROADMAP_GRADIENTS = listOf(
-    listOf(Color(0xFF6366F1), Color(0xFF8B5CF6)),
-    listOf(Color(0xFF14B8A6), Color(0xFF10B981)),
-    listOf(Color(0xFFF59E0B), Color(0xFFF97316)),
-    listOf(Color(0xFF3B82F6), Color(0xFFEC4899)),
-    listOf(Color(0xFF8B5CF6), Color(0xFFEC4899)),
+    listOf(StudyHubColors.Primary, StudyHubColors.Secondary),
+    listOf(StudyHubColors.Info, StudyHubColors.Primary),
+    listOf(StudyHubColors.Accent, StudyHubColors.AccentDark),
+    listOf(StudyHubColors.Info, StudyHubColors.InfoLight),
+    listOf(StudyHubColors.Primary, StudyHubColors.Info),
 )
 
 @Composable
@@ -245,7 +245,7 @@ private fun RoadmapGenerator(onGenerated: (Roadmap) -> Unit, onError: (String) -
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))))
+                .background(Brush.linearGradient(listOf(StudyHubColors.HeroLight, StudyHubColors.Hero)))
                 .padding(horizontal = 18.dp, vertical = 18.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

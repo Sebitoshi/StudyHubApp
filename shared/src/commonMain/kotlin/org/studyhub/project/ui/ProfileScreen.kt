@@ -39,6 +39,7 @@ import org.studyhub.project.StudyHubColors
 import org.studyhub.project.net.Api
 import org.studyhub.project.net.DashboardSummary
 import org.studyhub.project.net.ProfileAcademic
+import org.studyhub.project.net.TokenStore
 import org.studyhub.project.ui.icons.AppIcon
 
 @Composable
@@ -48,9 +49,17 @@ fun ProfileScreen(onLogout: () -> Unit, onOpenSpace: (SpaceTarget) -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
+    val demo = remember { TokenStore.load() == null }
 
     LaunchedEffect(reload) {
         loading = true
+        if (demo) {
+            summary = DemoData.dashboard
+            academic = DemoData.academic
+            error = null
+            loading = false
+            return@LaunchedEffect
+        }
         try {
             summary = Api.client.dashboard()
             academic = runCatching { Api.client.profileAcademic() }.getOrNull()
@@ -118,7 +127,9 @@ fun ProfileScreen(onLogout: () -> Unit, onOpenSpace: (SpaceTarget) -> Unit) {
                                 Spacer(Modifier.height(8.dp))
                             }
                             if (a.promedio > 0) {
-                                InfoRow(Icons.Outlined.WorkspacePremium, "Promedio", a.promedio.toString())
+                                val avg5 = if (a.promedio > 5) a.promedio / 20 else a.promedio
+                                val label = ((avg5 * 10).toInt() / 10.0).toString()
+                                InfoRow(Icons.Outlined.WorkspacePremium, "Promedio", "$label / 5.0")
                             }
                         }
                         Spacer(Modifier.height(14.dp))

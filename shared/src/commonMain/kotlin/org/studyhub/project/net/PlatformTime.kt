@@ -5,3 +5,6 @@ expect fun platformCurrentTimeHM(): String
 
 /** dayOfWeek en hora local (0=Domingo … 6=Sábado). */
 expect fun platformTodayDayOfWeek(): Int
+
+/** Fecha local de hoy en formato AAAA-MM-DD. */
+expect fun platformTodayIso(): String

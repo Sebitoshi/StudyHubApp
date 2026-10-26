@@ -549,7 +549,7 @@ private fun Orb(modifier: Modifier = Modifier, color: Color) {
             .clip(CircleShape)
             .background(
                 Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = 0.16f), color.copy(alpha = 0f)),
+                    colors = listOf(color.copy(alpha = 0.10f), color.copy(alpha = 0f)),
                 ),
             ),
     )
@@ -642,7 +642,7 @@ private fun SegmentedAuth(mode: AuthMode, onSelect: (AuthMode) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(999.dp))
-            .background(Color(0x1A94A3B8))
+            .background(StudyHubColors.SurfaceLight)
             .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(999.dp))
             .padding(4.dp),
     ) {
@@ -781,13 +781,13 @@ private fun DemoButton(onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .border(1.5.dp, Color(0x5994A3B8), RoundedCornerShape(14.dp))
+            .border(1.5.dp, StudyHubColors.Border, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 13.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "Ver demo sin cuenta →",
+            text = "Ver demo sin cuenta",
             color = StudyHubColors.TextSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,

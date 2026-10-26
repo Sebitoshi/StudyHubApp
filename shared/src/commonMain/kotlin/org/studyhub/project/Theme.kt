@@ -3,57 +3,77 @@ package org.studyhub.project
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
- * StudyHub — Premium Dark Glassmorphism.
- * Tokens tomados del frontend web (styles.css) para mantener la misma identidad visual.
+ * StudyHub — "Sage & Paper".
+ *
+ * Identidad visual clara, cálida y calmada: fondo papel verdoso, tarjetas blancas,
+ * acentos salvia y bloques pastel (crema, lavanda, melocotón y cielo).
+ * Los nombres de los tokens se mantienen para no romper las pantallas existentes.
  */
 object StudyHubColors {
-    val Bg = Color(0xFF0F172A)
-    val Surface = Color(0xFF1E293B)
-    val SurfaceLight = Color(0xFF334155)
-    val SurfaceHover = Color(0xFF3B4A63)
+    // Superficies
+    val Bg = Color(0xFFF4F7EF)
+    val BgAlt = Color(0xFFEFF4E8)
+    val Surface = Color(0xFFFFFFFF)
+    val SurfaceLight = Color(0xFFEDF2E7)
+    val SurfaceHover = Color(0xFFE2EAD9)
 
-    val Glass = Color(0x991E293B)          // rgba(30,41,59,.6)
-    val GlassBorder = Color(0x1A94A3B8)    // rgba(148,163,184,.1)
-    val Border = Color(0x1F94A3B8)         // rgba(148,163,184,.12)
+    val Glass = Color(0xFFFFFFFF)
+    val GlassBorder = Color(0xFFE7ECDF)
+    val Border = Color(0xFFE4EAD9)
 
-    val Primary = Color(0xFF6366F1)
-    val PrimaryDark = Color(0xFF4F46E5)
-    val PrimaryLight = Color(0xFF818CF8)
-    val Secondary = Color(0xFF10B981)
-    val SecondaryLight = Color(0xFF34D399)
-    val Accent = Color(0xFFF59E0B)
-    val AccentLight = Color(0xFFFBBF24)
-    val AccentDark = Color(0xFFD97706)
-    val Danger = Color(0xFFF43F5E)
-    val DangerLight = Color(0xFFFB7185)
-    val Info = Color(0xFF3B82F6)
-    val InfoLight = Color(0xFF93BBFD)
+    // Salvia (color principal)
+    val Primary = Color(0xFF5E7C50)
+    val PrimaryDark = Color(0xFF4C6741)
+    val PrimaryLight = Color(0xFF6F8F5F)
 
-    val TextPrimary = Color(0xFFF8FAFC)
-    val TextSecondary = Color(0xFF94A3B8)
-    val TextTertiary = Color(0xFF64748B)
+    // Apoyo
+    val Secondary = Color(0xFF7D9C6B)
+    val SecondaryLight = Color(0xFF5E7C50)
+    val Accent = Color(0xFFC98A4A)
+    val AccentLight = Color(0xFFB9763A)
+    val AccentDark = Color(0xFF9C5F2A)
+    val Danger = Color(0xFFC06055)
+    val DangerLight = Color(0xFFB4534A)
+    val Info = Color(0xFF6B82B8)
+    val InfoLight = Color(0xFF5B72A8)
+
+    // Texto
+    val TextPrimary = Color(0xFF2F3A2B)
+    val TextSecondary = Color(0xFF6F7A68)
+    val TextTertiary = Color(0xFF9AA391)
+
+    // Bloques pastel del nuevo diseño
+    val Hero = Color(0xFF5E7C50)
+    val HeroDark = Color(0xFF4F6B45)
+    val HeroLight = Color(0xFF7C9A6D)
+    val Cream = Color(0xFFFBF7EA)
+    val Lavender = Color(0xFFEFEEF7)
+    val SageSoft = Color(0xFFEAF0E3)
+    val Peach = Color(0xFFFAEEE6)
+    val Sky = Color(0xFFEAF0F7)
+    val Rose = Color(0xFFF7EBED)
 }
 
-private val StudyHubColorScheme = darkColorScheme(
+private val StudyHubColorScheme = lightColorScheme(
     primary = StudyHubColors.Primary,
     onPrimary = Color.White,
-    primaryContainer = StudyHubColors.PrimaryDark,
-    onPrimaryContainer = Color(0xFFC7D2FE),
+    primaryContainer = StudyHubColors.SageSoft,
+    onPrimaryContainer = StudyHubColors.PrimaryDark,
     inversePrimary = StudyHubColors.PrimaryLight,
     secondary = StudyHubColors.Secondary,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFF064E3B),
-    onSecondaryContainer = Color(0xFFA7F3D0),
+    secondaryContainer = StudyHubColors.SageSoft,
+    onSecondaryContainer = StudyHubColors.PrimaryDark,
     tertiary = StudyHubColors.Accent,
-    onTertiary = Color(0xFF1C1917),
-    tertiaryContainer = Color(0xFF78350F),
-    onTertiaryContainer = Color(0xFFFCD34D),
+    onTertiary = Color.White,
+    tertiaryContainer = StudyHubColors.Peach,
+    onTertiaryContainer = StudyHubColors.AccentDark,
     background = StudyHubColors.Bg,
     onBackground = StudyHubColors.TextPrimary,
     surface = StudyHubColors.Surface,
@@ -61,18 +81,18 @@ private val StudyHubColorScheme = darkColorScheme(
     surfaceVariant = StudyHubColors.SurfaceLight,
     onSurfaceVariant = StudyHubColors.TextSecondary,
     surfaceTint = StudyHubColors.Primary,
-    outline = StudyHubColors.TextTertiary,
+    outline = StudyHubColors.Border,
     outlineVariant = StudyHubColors.SurfaceLight,
     error = StudyHubColors.Danger,
     onError = Color.White,
-    errorContainer = Color(0xFF4C0519),
-    onErrorContainer = Color(0xFFFDA4AF),
+    errorContainer = StudyHubColors.Rose,
+    onErrorContainer = StudyHubColors.DangerLight,
 )
 
 private val StudyHubShapes = Shapes(
     small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(20.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
 )
 
 @Composable

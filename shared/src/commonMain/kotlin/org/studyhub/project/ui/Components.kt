@@ -1,11 +1,11 @@
 package org.studyhub.project.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,8 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -39,14 +44,14 @@ import androidx.compose.ui.unit.sp
 import org.studyhub.project.StudyHubColors
 import org.studyhub.project.ui.icons.AppIcon
 
-// ─── Tarjeta de cristal ─────────────────────────────────────────────────
+// ─── Tarjeta blanca suave ───────────────────────────────────────────────
 
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    radius: Dp = 20.dp,
+    radius: Dp = 22.dp,
     contentPadding: Dp = 18.dp,
-    background: Color = StudyHubColors.Glass,
+    background: Color = StudyHubColors.Surface,
     borderColor: Color = StudyHubColors.GlassBorder,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -60,6 +65,92 @@ fun GlassCard(
     )
 }
 
+// ─── Cabecera común de pantalla ─────────────────────────────────────────
+
+/**
+ * Cabecera del nuevo diseño: eyebrow en mayúsculas, título grande, campana y avatar.
+ */
+@Composable
+fun StudyHubTopBar(
+    eyebrow: String,
+    title: String,
+    unread: Int,
+    onBell: () -> Unit,
+    userName: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable (() -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = eyebrow.uppercase(),
+                color = StudyHubColors.TextSecondary,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.1.sp,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = title,
+                color = StudyHubColors.TextPrimary,
+                fontSize = 23.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.3).sp,
+                maxLines = 1,
+            )
+        }
+        if (trailing != null) {
+            trailing()
+            Spacer(Modifier.width(8.dp))
+        }
+        NotificationBell(unread = unread, onBell = onBell)
+        Spacer(Modifier.width(8.dp))
+        InitialsAvatar(
+            name = userName,
+            size = 38.dp,
+            gradient = listOf(StudyHubColors.HeroLight, StudyHubColors.Hero),
+        )
+    }
+}
+
+@Composable
+fun NotificationBell(unread: Int, onBell: () -> Unit) {
+    Box(contentAlignment = Alignment.TopEnd) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(StudyHubColors.Surface)
+                .border(1.dp, StudyHubColors.GlassBorder, CircleShape)
+                .clickable(onClick = onBell),
+            contentAlignment = Alignment.Center,
+        ) {
+            AppIcon(Icons.Outlined.Notifications, tint = StudyHubColors.TextSecondary, size = 19.dp)
+        }
+        if (unread > 0) {
+            Box(
+                modifier = Modifier
+                    .size(15.dp)
+                    .clip(CircleShape)
+                    .background(StudyHubColors.Danger)
+                    .border(2.dp, StudyHubColors.Bg, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (unread > 9) "9+" else "$unread",
+                    color = Color.White,
+                    fontSize = 7.5.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
 // ─── Título de sección ──────────────────────────────────────────────────
 
 @Composable
@@ -69,7 +160,7 @@ fun SectionTitle(
     action: String? = null,
     onAction: (() -> Unit)? = null,
     icon: ImageVector? = null,
-    iconTint: Color = StudyHubColors.PrimaryLight,
+    iconTint: Color = StudyHubColors.Primary,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -82,8 +173,8 @@ fun SectionTitle(
         Text(
             text = text,
             color = StudyHubColors.TextPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = 15.5.sp,
+            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
         if (action != null && onAction != null) {
@@ -91,19 +182,19 @@ fun SectionTitle(
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
                     .clickable(onClick = onAction)
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = action,
-                    color = StudyHubColors.PrimaryLight,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Bold,
+                    color = StudyHubColors.TextSecondary,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Medium,
                 )
                 AppIcon(
                     Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                    tint = StudyHubColors.PrimaryLight,
-                    size = 16.dp,
+                    tint = StudyHubColors.TextSecondary,
+                    size = 15.dp,
                 )
             }
         }
@@ -122,7 +213,7 @@ fun Badge(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(color.copy(alpha = 0.15f))
+            .background(color.copy(alpha = 0.13f))
             .padding(horizontal = if (small) 8.dp else 10.dp, vertical = if (small) 3.dp else 4.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -135,7 +226,7 @@ fun Badge(
     }
 }
 
-// ─── Icono en cuadro con gradiente (tile) ───────────────────────────────
+// ─── Icono en cuadro pastel ─────────────────────────────────────────────
 
 @Composable
 fun IconTile(
@@ -143,16 +234,22 @@ fun IconTile(
     gradient: List<Color>,
     modifier: Modifier = Modifier,
     size: Dp = 44.dp,
-    iconTint: Color = Color.White,
+    iconTint: Color? = null,
 ) {
+    val base = gradient.firstOrNull() ?: StudyHubColors.Primary
+    val isLight = base.red > 0.85f && base.green > 0.85f && base.blue > 0.85f
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(13.dp))
-            .background(Brush.linearGradient(gradient)),
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isLight) base else base.copy(alpha = 0.16f)),
         contentAlignment = Alignment.Center,
     ) {
-        AppIcon(icon, tint = iconTint, size = (size.value * 0.5f).dp)
+        AppIcon(
+            icon,
+            tint = iconTint ?: if (isLight) Color.White else base,
+            size = (size.value * 0.48f).dp,
+        )
     }
 }
 
@@ -167,17 +264,13 @@ fun StatCard(
     modifier: Modifier = Modifier,
 ) {
     GlassCard(modifier = modifier, radius = 18.dp, contentPadding = 14.dp) {
-        IconTile(
-            icon = icon,
-            gradient = listOf(tint.copy(alpha = 0.9f), tint.copy(alpha = 0.55f)),
-            size = 38.dp,
-        )
+        IconTile(icon = icon, gradient = listOf(tint), size = 38.dp)
         Spacer(Modifier.height(10.dp))
         Text(
             text = value,
             color = StudyHubColors.TextPrimary,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = 23.sp,
+            fontWeight = FontWeight.Bold,
         )
         Text(
             text = label,
@@ -189,7 +282,7 @@ fun StatCard(
     }
 }
 
-// ─── Barra de progreso con gradiente ────────────────────────────────────
+// ─── Barra de progreso ──────────────────────────────────────────────────
 
 @Composable
 fun GlassProgress(
@@ -197,7 +290,7 @@ fun GlassProgress(
     color: Color = StudyHubColors.Primary,
     modifier: Modifier = Modifier,
     track: Color = StudyHubColors.SurfaceLight,
-    height: Dp = 8.dp,
+    height: Dp = 7.dp,
 ) {
     val safe = progress.coerceIn(0f, 1f)
     Box(
@@ -212,7 +305,50 @@ fun GlassProgress(
                 .fillMaxWidth(safe)
                 .height(height)
                 .clip(RoundedCornerShape(999.dp))
-                .background(Brush.linearGradient(listOf(color, color.copy(alpha = 0.7f)))),
+                .background(color),
+        )
+    }
+}
+
+// ─── Anillo de progreso para tarjetas destacadas ────────────────────────
+
+@Composable
+fun HeroProgressRing(
+    percent: Int,
+    modifier: Modifier = Modifier,
+    size: Dp = 84.dp,
+    color: Color = Color.White,
+    track: Color = Color.White.copy(alpha = 0.24f),
+) {
+    val stroke = 7.dp
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size)) {
+            val arcSize = size.toPx() - stroke.toPx()
+            val topLeft = Offset(stroke.toPx() / 2, stroke.toPx() / 2)
+            drawArc(
+                color = track,
+                startAngle = 0f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = Size(arcSize, arcSize),
+                style = Stroke(stroke.toPx()),
+            )
+            drawArc(
+                color = color,
+                startAngle = -90f,
+                sweepAngle = 360f * (percent.coerceIn(0, 100) / 100f),
+                useCenter = false,
+                topLeft = topLeft,
+                size = Size(arcSize, arcSize),
+                style = Stroke(stroke.toPx(), cap = StrokeCap.Round),
+            )
+        }
+        Text(
+            text = "$percent%",
+            color = color,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -228,14 +364,16 @@ fun PrimaryButton(
     icon: ImageVector? = null,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(13.dp)
+    val shape = RoundedCornerShape(16.dp)
     Box(
         modifier = modifier
             .clip(shape)
-            .shadow(12.dp, shape, spotColor = StudyHubColors.Primary.copy(alpha = 0.35f))
+            .shadow(8.dp, shape, spotColor = StudyHubColors.Primary.copy(alpha = 0.22f))
             .then(
                 if (enabled) {
-                    Modifier.background(Brush.linearGradient(listOf(StudyHubColors.Primary, StudyHubColors.PrimaryDark)))
+                    Modifier.background(
+                        Brush.linearGradient(listOf(StudyHubColors.Primary, StudyHubColors.PrimaryDark)),
+                    )
                 } else {
                     Modifier.background(StudyHubColors.SurfaceLight)
                 },
@@ -260,7 +398,7 @@ fun PrimaryButton(
                     text = text,
                     color = Color.White,
                     fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
         }
@@ -275,26 +413,26 @@ fun GlassChip(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    color: Color = StudyHubColors.PrimaryLight,
+    color: Color = StudyHubColors.Primary,
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(if (selected) color.copy(alpha = 0.18f) else StudyHubColors.Surface)
+            .background(if (selected) color else StudyHubColors.Surface)
             .border(
                 1.dp,
-                if (selected) color.copy(alpha = 0.6f) else StudyHubColors.Border,
+                if (selected) color else StudyHubColors.Border,
                 RoundedCornerShape(999.dp),
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            .padding(horizontal = 15.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
-            color = if (selected) color else StudyHubColors.TextSecondary,
-            fontSize = 12.5.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) Color.White else StudyHubColors.TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
         )
     }
 }
@@ -331,12 +469,13 @@ fun ErrorState(
             Spacer(Modifier.height(16.dp))
             Text(
                 text = "Reintentar",
-                color = StudyHubColors.PrimaryLight,
+                color = StudyHubColors.Primary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(StudyHubColors.Surface)
+                    .border(1.dp, StudyHubColors.Border, RoundedCornerShape(12.dp))
                     .clickable(onClick = onRetry)
                     .padding(horizontal = 22.dp, vertical = 10.dp),
             )
@@ -373,8 +512,8 @@ fun RowScope.LeadingIcon(
     Box(
         modifier = modifier
             .size(size)
-            .clip(RoundedCornerShape(12.dp))
-            .background(tint.copy(alpha = 0.15f)),
+            .clip(RoundedCornerShape(13.dp))
+            .background(tint.copy(alpha = 0.13f)),
         contentAlignment = Alignment.Center,
     ) {
         AppIcon(icon, tint = tint, size = iconSize)
@@ -388,22 +527,22 @@ fun ScoreRing(
     score: Int,
     label: String,
     modifier: Modifier = Modifier,
-    color: Color = StudyHubColors.PrimaryLight,
+    color: Color = StudyHubColors.Primary,
     size: Dp = 96.dp,
 ) {
     val stroke = 9.dp
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
-        androidx.compose.foundation.Canvas(Modifier.size(size)) {
+        Canvas(Modifier.size(size)) {
             val arcSize = size.toPx() - stroke.toPx()
-            val topLeft = androidx.compose.ui.geometry.Offset(stroke.toPx() / 2, stroke.toPx() / 2)
+            val topLeft = Offset(stroke.toPx() / 2, stroke.toPx() / 2)
             drawArc(
                 color = StudyHubColors.SurfaceLight,
                 startAngle = 0f,
                 sweepAngle = 360f,
                 useCenter = false,
                 topLeft = topLeft,
-                size = androidx.compose.ui.geometry.Size(arcSize, arcSize),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke.toPx()),
+                size = Size(arcSize, arcSize),
+                style = Stroke(stroke.toPx()),
             )
             drawArc(
                 color = color,
@@ -411,11 +550,8 @@ fun ScoreRing(
                 sweepAngle = 360f * (score.coerceIn(0, 100) / 100f),
                 useCenter = false,
                 topLeft = topLeft,
-                size = androidx.compose.ui.geometry.Size(arcSize, arcSize),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    stroke.toPx(),
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                ),
+                size = Size(arcSize, arcSize),
+                style = Stroke(stroke.toPx(), cap = StrokeCap.Round),
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -423,7 +559,7 @@ fun ScoreRing(
                 text = "$score%",
                 color = StudyHubColors.TextPrimary,
                 fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Bold,
             )
             Text(
                 text = label,
@@ -435,7 +571,7 @@ fun ScoreRing(
     }
 }
 
-// ─── Campo de texto glass ───────────────────────────────────────────────
+// ─── Campo de texto suave ───────────────────────────────────────────────
 
 @Composable
 fun GlassTextField(
@@ -452,7 +588,7 @@ fun GlassTextField(
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
         singleLine = singleLine,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         textStyle = androidx.compose.ui.text.TextStyle(
             color = StudyHubColors.TextPrimary,
             fontSize = 14.sp,
@@ -478,13 +614,13 @@ fun GlassTextField(
             cursorColor = StudyHubColors.Primary,
             focusedPlaceholderColor = StudyHubColors.TextTertiary,
             unfocusedPlaceholderColor = StudyHubColors.TextTertiary,
-            focusedLabelColor = StudyHubColors.PrimaryLight,
+            focusedLabelColor = StudyHubColors.Primary,
             unfocusedLabelColor = StudyHubColors.TextSecondary,
         ),
     )
 }
 
-// ─── Avatar de iniciales ─────────────────────────────────────────────────
+// ─── Avatar de iniciales ────────────────────────────────────────────────
 
 @Composable
 fun InitialsAvatar(
@@ -513,8 +649,8 @@ fun InitialsAvatar(
         Text(
             text = initials,
             color = Color.White,
-            fontSize = (size.value * 0.38f).sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = (size.value * 0.34f).sp,
+            fontWeight = FontWeight.Bold,
         )
     }
 }

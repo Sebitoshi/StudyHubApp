@@ -82,6 +82,7 @@ import org.studyhub.project.net.SandboxStats
 import org.studyhub.project.net.StudySession
 import org.studyhub.project.net.StudyTimerStats
 import org.studyhub.project.net.Subject
+import org.studyhub.project.net.TokenStore
 import org.studyhub.project.net.dayName
 import org.studyhub.project.ui.icons.AppIcon
 
@@ -93,19 +94,19 @@ enum class SpaceTarget(
     val icon: ImageVector,
     val gradient: List<Color>,
 ) {
-    RISK("Riesgo Académico", "Análisis de tu actividad", Icons.Outlined.Security, listOf(Color(0xFFF97316), Color(0xFFF43F5E))),
-    ACHIEVEMENTS("Logros", "Gamificación", Icons.Outlined.EmojiEvents, listOf(Color(0xFFF59E0B), Color(0xFFEF4444))),
-    QUIZZES("Quizzes", "Generados por IA", Icons.Outlined.Quiz, listOf(Color(0xFFF97316), Color(0xFFEC4899))),
-    BREACHES("Brechas", "De conocimiento", Icons.Outlined.Psychology, listOf(Color(0xFF6366F1), Color(0xFF8B5CF6))),
-    SCHEDULE("Horario", "Clases semanales", Icons.Outlined.CalendarMonth, listOf(Color(0xFFF59E0B), Color(0xFFFBBF24))),
-    CALENDAR("Calendario", "Exámenes y eventos", Icons.Outlined.CalendarMonth, listOf(Color(0xFF3B82F6), Color(0xFF06B6D4))),
-    FOCUS("Enfoque", "Temporizador de estudio", Icons.Outlined.Timer, listOf(Color(0xFF10B981), Color(0xFF14B8A6))),
-    ACADEMIC("Perfil Académico", "Carrera, semestre y promedio", Icons.Outlined.School, listOf(Color(0xFF6366F1), Color(0xFF0EA5E9))),
-    NOTIFICATIONS("Notificaciones", "Alertas y recordatorios", Icons.Outlined.Notifications, listOf(Color(0xFFF43F5E), Color(0xFFF97316))),
-    GOALS("Metas de Aprendizaje", "IA · progreso y fechas objetivo", Icons.Outlined.TrackChanges, listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))),
+    RISK("Riesgo Académico", "Análisis de tu actividad", Icons.Outlined.Security, listOf(StudyHubColors.Accent, StudyHubColors.Danger)),
+    ACHIEVEMENTS("Logros", "Gamificación", Icons.Outlined.EmojiEvents, listOf(StudyHubColors.Accent, StudyHubColors.AccentDark)),
+    QUIZZES("Quizzes", "Generados por IA", Icons.Outlined.Quiz, listOf(StudyHubColors.Accent, StudyHubColors.Danger)),
+    BREACHES("Brechas", "De conocimiento", Icons.Outlined.Psychology, listOf(StudyHubColors.Info, StudyHubColors.Primary)),
+    SCHEDULE("Horario", "Clases semanales", Icons.Outlined.CalendarMonth, listOf(StudyHubColors.Accent, StudyHubColors.AccentLight)),
+    CALENDAR("Calendario", "Exámenes y eventos", Icons.Outlined.CalendarMonth, listOf(StudyHubColors.Info, StudyHubColors.InfoLight)),
+    FOCUS("Enfoque", "Temporizador de estudio", Icons.Outlined.Timer, listOf(StudyHubColors.Primary, StudyHubColors.Secondary)),
+    ACADEMIC("Perfil Académico", "Carrera, semestre y promedio", Icons.Outlined.School, listOf(StudyHubColors.Primary, StudyHubColors.Info)),
+    NOTIFICATIONS("Notificaciones", "Alertas y recordatorios", Icons.Outlined.Notifications, listOf(StudyHubColors.Danger, StudyHubColors.Accent)),
+    GOALS("Metas de Aprendizaje", "IA · progreso y fechas objetivo", Icons.Outlined.TrackChanges, listOf(StudyHubColors.Info, StudyHubColors.Primary)),
     // No se muestran en la grilla (perfil): CV y Laboratorio
-    CV("Mi CV", "Builder + PDF", Icons.Outlined.Description, listOf(Color(0xFF8B5CF6), Color(0xFF3B82F6))),
-    LAB("Laboratorio", "Ejercicios", Icons.Outlined.Science, listOf(Color(0xFF14B8A6), Color(0xFF10B981))),
+    CV("Mi CV", "Builder + PDF", Icons.Outlined.Description, listOf(StudyHubColors.Info, StudyHubColors.Primary)),
+    LAB("Laboratorio", "Ejercicios", Icons.Outlined.Science, listOf(StudyHubColors.Primary, StudyHubColors.Secondary)),
 }
 
 private data class SpaceGroup(val title: String, val targets: List<SpaceTarget>)
@@ -509,7 +510,8 @@ private fun ScheduleAggregated(subjects: List<Subject>) {
 // ─── Calendario / Eventos ───────────────────────────────────────────────
 
 @Composable
-private fun CalendarScreen(onBack: () -> Unit) {
+internal fun CalendarScreen(onBack: () -> Unit, embedded: Boolean = false) {
+    val demo = remember { TokenStore.load() == null }
     var exams by remember { mutableStateOf<List<CalendarEvent>>(emptyList()) }
     var data by remember { mutableStateOf<CalendarData?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -519,6 +521,13 @@ private fun CalendarScreen(onBack: () -> Unit) {
 
     LaunchedEffect(reload) {
         loading = true
+        if (demo) {
+            exams = DemoData.exams
+            data = DemoData.calendar
+            error = null
+            loading = false
+            return@LaunchedEffect
+        }
         try {
             exams = Api.client.upcomingExams()
             data = Api.client.calendarEvents()
@@ -544,7 +553,9 @@ private fun CalendarScreen(onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        FullScreenBackBar("Calendario", "Exámenes, eventos y tareas", onBack)
+        if (!embedded) {
+            FullScreenBackBar("Calendario", "Exámenes, eventos y tareas", onBack)
+        }
         Box(Modifier.weight(1f)) {
             when {
                 loading -> LoadingState()
@@ -555,7 +566,26 @@ private fun CalendarScreen(onBack: () -> Unit) {
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 18.dp),
                 ) {
-                    SectionTitle("Exámenes próximos", icon = Icons.Outlined.Event, iconTint = StudyHubColors.DangerLight)
+                    if (embedded) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "TU CALENDARIO",
+                            color = StudyHubColors.TextSecondary,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.1.sp,
+                        )
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            text = "Agenda",
+                            color = StudyHubColors.TextPrimary,
+                            fontSize = 23.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.3).sp,
+                        )
+                        Spacer(Modifier.height(20.dp))
+                    }
+                    SectionTitle("Exámenes próximos", icon = Icons.Outlined.Event, iconTint = StudyHubColors.Danger)
                     Spacer(Modifier.height(10.dp))
                     if (exams.isEmpty()) {
                         EmptyState("No tienes exámenes en los próximos 30 días.")
@@ -605,6 +635,12 @@ private fun CalendarScreen(onBack: () -> Unit) {
             }
         }
     }
+}
+
+/** Pestaña Agenda: el calendario sin barra de volver. */
+@Composable
+fun AgendaScreen() {
+    CalendarScreen(onBack = {}, embedded = true)
 }
 
 private data class CalItem(
@@ -1272,8 +1308,15 @@ private fun AcademicScreen(onBack: () -> Unit) {
     var promedio by remember { mutableStateOf("") }
     var modalidad by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val demo = remember { TokenStore.load() == null }
 
     LaunchedEffect(Unit) {
+        if (demo) {
+            profile = DemoData.academic
+            error = null
+            loading = false
+            return@LaunchedEffect
+        }
         try {
             profile = Api.client.profileAcademic()
             error = null

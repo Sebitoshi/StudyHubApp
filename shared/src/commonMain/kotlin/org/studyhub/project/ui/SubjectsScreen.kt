@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,9 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +21,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -57,22 +55,38 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import org.studyhub.project.StudyHubColors
 import org.studyhub.project.net.Api
+import org.studyhub.project.net.DashboardSummary
 import org.studyhub.project.net.Note
+import org.studyhub.project.net.ProfileAcademic
 import org.studyhub.project.net.Schedule
 import org.studyhub.project.net.Subject
 import org.studyhub.project.net.SubjectDetail
 import org.studyhub.project.net.SubjectTask
+import org.studyhub.project.net.TokenStore
 import org.studyhub.project.net.dayName
 import org.studyhub.project.ui.icons.AppIcon
 
 // ─── Lista de materias ──────────────────────────────────────────────────
 
 @Composable
-fun SubjectsScreen(onOpenDetail: (Int, String, String) -> Unit) {
+fun SubjectsScreen(
+    onOpenDetail: (Int, String, String) -> Unit,
+    unread: Int,
+    onBell: () -> Unit,
+    userName: String,
+    onOpenSpace: (SpaceTarget) -> Unit,
+) {
+    val demo = remember { TokenStore.load() == null }
     var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    var details by remember { mutableStateOf<Map<Int, SubjectDetail>>(emptyMap()) }
+    var summary by remember { mutableStateOf<DashboardSummary?>(null) }
+    var academic by remember { mutableStateOf<ProfileAcademic?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
@@ -80,8 +94,26 @@ fun SubjectsScreen(onOpenDetail: (Int, String, String) -> Unit) {
 
     LaunchedEffect(reload) {
         loading = true
+        if (demo) {
+            subjects = DemoData.subjects
+            details = DemoData.subjectDetails
+            summary = DemoData.dashboard
+            academic = DemoData.academic
+            error = null
+            loading = false
+            return@LaunchedEffect
+        }
         try {
-            subjects = Api.client.subjects()
+            val loaded = Api.client.subjects()
+            subjects = loaded
+            summary = runCatching { Api.client.dashboard() }.getOrNull()
+            academic = runCatching { Api.client.profileAcademic() }.getOrNull()
+            details = coroutineScope {
+                val pairs = loaded.map { s ->
+                    async { s.id to runCatching { Api.client.subjectDetail(s.id) }.getOrNull() }
+                }.map { it.await() }
+                pairs.mapNotNull { (id, detail) -> detail?.let { id to it } }.toMap()
+            }
             error = null
         } catch (e: Exception) {
             error = e.message ?: "No se pudieron cargar las materias"
@@ -112,79 +144,163 @@ fun SubjectsScreen(onOpenDetail: (Int, String, String) -> Unit) {
                 error = null
                 reload++
             }
-            else -> LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 4.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    // Header compacto estilo Tutor IA
-                    Row(
+            else -> {
+                val stats = summary?.stats
+                val completed = stats?.completedTasks ?: details.values.sumOf { d -> d.tasks.count { it.completed } }
+                val pending = stats?.pendingTasks ?: details.values.sumOf { d -> d.tasks.count { !it.completed } }
+                val total = completed + pending
+                val overall = if (total > 0) completed.toFloat() / total else 0f
+                val completion = summary?.completionRate?.roundToInt()?.takeIf { it > 0 } ?: (overall * 100).roundToInt()
+                val avg5: Double? = academic?.promedio?.takeIf { it > 0 }?.let { if (it > 5) it / 20 else it }
+                    ?: (overall * 5).toDouble().takeIf { total > 0 }
+                val semester = academic?.semestreActual?.takeIf { it > 0 }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                ) {
+                    Spacer(Modifier.height(8.dp))
+                    StudyHubTopBar(
+                        eyebrow = "Tu espacio de aprendizaje",
+                        title = "Mis materias",
+                        unread = unread,
+                        onBell = onBell,
+                        userName = userName,
+                    )
+                    Spacer(Modifier.height(18.dp))
+
+                    // Tarjeta resumen
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(StudyHubColors.Hero, StudyHubColors.HeroDark),
+                                ),
+                            )
+                            .padding(20.dp),
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
-                                .clip(RoundedCornerShape(13.dp))
-                                .background(Brush.linearGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED)))),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AppIcon(Icons.Outlined.MenuBook, tint = Color.White, size = 22.dp)
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "Materias",
-                                color = StudyHubColors.TextPrimary,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(StudyHubColors.PrimaryLight),
-                                )
-                                Spacer(Modifier.width(5.dp))
+                                .align(Alignment.TopEnd)
+                                .size(150.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.06f)),
+                        )
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(Color.White.copy(alpha = 0.16f))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
                                 Text(
-                                    text = if (subjects.isEmpty()) "Aún sin materias" else "${subjects.size} materias registradas",
-                                    color = StudyHubColors.PrimaryLight,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
+                                    text = semester?.let { "Semestre $it" } ?: "Tu semestre",
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp,
                                 )
                             }
+                            Spacer(Modifier.height(14.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${subjects.size} materias activas",
+                                        color = Color.White,
+                                        fontSize = 21.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        letterSpacing = (-0.3).sp,
+                                    )
+                                    Spacer(Modifier.height(5.dp))
+                                    Text(
+                                        text = "Tu promedio general",
+                                        color = Color.White.copy(alpha = 0.72f),
+                                        fontSize = 10.5.sp,
+                                    )
+                                    Spacer(Modifier.height(2.dp))
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        Text(
+                                            text = avg5?.let { oneDecimal(it) } ?: "—",
+                                            color = Color.White,
+                                            fontSize = 30.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            lineHeight = 32.sp,
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = "/ 5.0",
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(bottom = 5.dp),
+                                        )
+                                    }
+                                }
+                                HeroProgressRing(percent = completion, size = 82.dp)
+                            }
                         }
-                        // Agregar materia (pill, como "Nueva" del Tutor)
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(StudyHubColors.Surface)
-                                .clickable { creating = true }
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            AppIcon(Icons.Outlined.Add, tint = StudyHubColors.PrimaryLight, size = 16.dp)
-                            Spacer(Modifier.width(5.dp))
-                            Text("Agregar", color = StudyHubColors.PrimaryLight, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(22.dp))
+
+                    SectionTitle(
+                        text = "Resumen académico",
+                        action = "Editar",
+                        onAction = { onOpenSpace(SpaceTarget.ACADEMIC) },
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        AcademicSummaryCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.CheckCircle,
+                            tint = StudyHubColors.Primary,
+                            value = "$completed",
+                            label = "tareas completadas",
+                        )
+                        AcademicSummaryCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.AccessTime,
+                            tint = StudyHubColors.Accent,
+                            value = "$pending",
+                            label = "por entregar",
+                        )
+                    }
+                    Spacer(Modifier.height(22.dp))
+
+                    SectionTitle(
+                        text = "Tus materias",
+                        action = "+ Añadir",
+                        onAction = { creating = true },
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    if (subjects.isEmpty()) {
+                        EmptyState("Aún no tienes materias registradas. Toca \"+ Añadir\" para crear la primera.")
+                    } else {
+                        subjects.sortedBy { it.nombre.lowercase() }.forEach { subject ->
+                            val detail = details[subject.id]
+                            val tasks = detail?.tasks.orEmpty()
+                            val done = tasks.count { it.completed }
+                            val metric = when {
+                                tasks.isNotEmpty() -> oneDecimal(3.5 + 1.5 * (done.toDouble() / tasks.size))
+                                subject.creditos > 0 -> "${subject.creditos} cr"
+                                else -> "—"
+                            }
+                            SubjectRow(
+                                subject = subject,
+                                metric = metric,
+                                onClick = { onOpenDetail(subject.id, subject.nombre, subject.color) },
+                            )
+                            Spacer(Modifier.height(9.dp))
                         }
                     }
-                }
-                if (subjects.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
-                        EmptyState("Aún no tienes materias registradas. Toca \"Agregar materia\" para crear la primera.")
-                    }
-                }
-                items(subjects.sortedBy { it.nombre.lowercase() }, key = { it.id }) { subject ->
-                    SubjectCard(subject = subject) {
-                        onOpenDetail(subject.id, subject.nombre, subject.color)
-                    }
+                    Spacer(Modifier.height(18.dp))
                 }
             }
         }
@@ -192,88 +308,100 @@ fun SubjectsScreen(onOpenDetail: (Int, String, String) -> Unit) {
 }
 
 @Composable
-private fun GhostAddButton(text: String, onClick: () -> Unit) {
+private fun AcademicSummaryCard(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    value: String,
+    label: String,
+) {
+    GlassCard(modifier = modifier, radius = 18.dp, contentPadding = 14.dp) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(tint.copy(alpha = 0.13f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            AppIcon(icon, tint = tint, size = 17.dp)
+        }
+        Spacer(Modifier.height(9.dp))
+        Text(
+            text = value,
+            color = StudyHubColors.TextPrimary,
+            fontSize = 21.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            text = label,
+            color = StudyHubColors.TextSecondary,
+            fontSize = 10.5.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun SubjectRow(
+    subject: Subject,
+    metric: String,
+    onClick: () -> Unit,
+) {
+    val color = parseColor(subject.color)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(13.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(StudyHubColors.Surface)
-            .border(1.dp, StudyHubColors.Border, RoundedCornerShape(13.dp))
+            .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.Center,
+            .padding(horizontal = 14.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(Icons.Outlined.Add, tint = StudyHubColors.PrimaryLight, size = 17.dp)
-        Spacer(Modifier.width(6.dp))
-        Text(text, color = StudyHubColors.PrimaryLight, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = subject.nombre,
+                color = StudyHubColors.TextPrimary,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = subject.count?.let { "${it.tasks} tareas · ${it.notes} apuntes" }
+                    ?: subject.codigo.ifBlank { "Materia" },
+                color = StudyHubColors.TextTertiary,
+                fontSize = 10.5.sp,
+                maxLines = 1,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = metric,
+            color = StudyHubColors.TextPrimary,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.width(4.dp))
+        AppIcon(
+            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            tint = StudyHubColors.TextTertiary,
+            size = 17.dp,
+        )
     }
 }
 
-@Composable
-private fun SubjectCard(subject: Subject, onClick: () -> Unit) {
-    val color = parseColor(subject.color)
-    GlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(10.dp, RoundedCornerShape(18.dp), spotColor = color.copy(alpha = 0.22f))
-            .clickable(onClick = onClick),
-        radius = 18.dp,
-        contentPadding = 14.dp,
-    ) {
-        // Barra superior con el color de la materia
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(color),
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            subject.nombre,
-            color = StudyHubColors.TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            lineHeight = 17.sp,
-            maxLines = 2,
-            minLines = 2,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            buildString {
-                append(subject.codigo.ifBlank { "SIN CÓDIGO" })
-                if (subject.creditos > 0) append(" · ${subject.creditos} cr")
-            },
-            color = StudyHubColors.TextTertiary,
-            fontSize = 11.sp,
-        )
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = subject.count?.let { "${it.tasks} tareas · ${it.notes} apuntes" } ?: "",
-                color = StudyHubColors.TextTertiary,
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            // Inicial de la materia en un círculo con gradiente
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(color, color.copy(alpha = 0.55f)))),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = subject.nombre.trim().firstOrNull()?.uppercase() ?: "?",
-                    color = Color.White,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                )
-            }
-        }
-    }
+private fun oneDecimal(value: Double): String {
+    val rounded = (value * 10).roundToInt()
+    return "${rounded / 10}.${rounded % 10}"
 }
 
 // ─── Detalle de materia ─────────────────────────────────────────────────
@@ -301,9 +429,16 @@ fun SubjectDetailScreen(
     var form by remember { mutableStateOf<DetailForm?>(null) }
     var deleting by remember { mutableStateOf<Any?>(null) }
     val scope = rememberCoroutineScope()
+    val demo = remember { TokenStore.load() == null }
 
     LaunchedEffect(reload) {
         loading = true
+        if (demo) {
+            detail = DemoData.subjectDetails[subjectId]
+            error = if (detail == null) "Materia no encontrada" else null
+            loading = false
+            return@LaunchedEffect
+        }
         try {
             detail = Api.client.subjectDetail(subjectId)
             error = null
@@ -450,7 +585,7 @@ private fun SubjectDetailHeader(subject: SubjectDetail, accent: Color, onBack: (
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.30f), Color.Transparent))),
+            .background(Brush.verticalGradient(listOf(accent.copy(alpha = 0.16f), Color.Transparent))),
     ) {
         Row(
             modifier = Modifier

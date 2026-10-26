@@ -18,12 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Route
-import androidx.compose.material.icons.outlined.SmartToy
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -51,9 +50,9 @@ import org.studyhub.project.ui.icons.AppIcon
 
 enum class AppTab(val label: String, val icon: ImageVector) {
     HOME("Inicio", Icons.Outlined.Home),
+    AGENDA("Agenda", Icons.Outlined.CalendarMonth),
+    TUTOR("IA Study", Icons.Outlined.AutoAwesome),
     SUBJECTS("Materias", Icons.Outlined.MenuBook),
-    TUTOR("Tutor IA", Icons.Outlined.SmartToy),
-    ROADMAPS("Rutas", Icons.Outlined.Route),
     PROFILE("Perfil", Icons.Outlined.Person),
 }
 
@@ -80,6 +79,7 @@ fun MainApp(onLogout: () -> Unit) {
     val demo = remember { TokenStore.load() == null }
     val scope = rememberCoroutineScope()
 
+    var userName by remember { mutableStateOf(if (demo) DemoData.userName else "Estudiante") }
     var offline by remember { mutableStateOf(!OfflineState.isOnline) }
     DisposableEffect(Unit) {
         OfflineState.onChanged = { offline = !OfflineState.isOnline }
@@ -87,7 +87,18 @@ fun MainApp(onLogout: () -> Unit) {
     }
 
     LaunchedEffect(refreshTick) {
-        unread = runCatching { Api.client.unreadCount() }.getOrDefault(unread)
+        if (demo) {
+            unread = DemoData.unread
+            userName = DemoData.userName
+        } else {
+            unread = runCatching { Api.client.unreadCount() }.getOrDefault(unread)
+            runCatching { Api.client.dashboard() }
+                .getOrNull()
+                ?.user
+                ?.nombre
+                ?.takeIf { it.isNotBlank() }
+                ?.let { userName = it }
+        }
     }
 
     Box(Modifier.fillMaxSize().background(StudyHubColors.Bg)) {
@@ -115,11 +126,21 @@ fun MainApp(onLogout: () -> Unit) {
                         onOpenSubject = { id, name, color -> fullScreen = FullScreen.SubjectDetail(id, name, color, AppTab.HOME) },
                         onOpenSubjects = { tab = AppTab.SUBJECTS },
                     )
+                    AppTab.AGENDA -> AgendaScreen()
+                    AppTab.TUTOR -> TutorScreen(
+                        unread = unread,
+                        onBell = { notifOpen = true },
+                        userName = userName,
+                        onOpenSpace = { fullScreen = FullScreen.Space(it) },
+                        onOpenSubjects = { tab = AppTab.SUBJECTS },
+                    )
                     AppTab.SUBJECTS -> SubjectsScreen(
                         onOpenDetail = { id, name, color -> fullScreen = FullScreen.SubjectDetail(id, name, color, AppTab.SUBJECTS) },
+                        unread = unread,
+                        onBell = { notifOpen = true },
+                        userName = userName,
+                        onOpenSpace = { fullScreen = FullScreen.Space(it) },
                     )
-                    AppTab.TUTOR -> TutorScreen()
-                    AppTab.ROADMAPS -> RoadmapsScreen()
                     AppTab.PROFILE -> ProfileScreen(
                         onLogout = onLogout,
                         onOpenSpace = { fullScreen = FullScreen.Space(it) },
@@ -156,60 +177,23 @@ fun MainApp(onLogout: () -> Unit) {
     }
 }
 
-// ─── Campana de notificaciones (solo en el dashboard, junto al saludo) ──
-
-@Composable
-fun NotificationBell(unread: Int, onBell: () -> Unit) {
-    Box(contentAlignment = Alignment.TopEnd) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(StudyHubColors.Surface)
-                .border(1.dp, StudyHubColors.Border, CircleShape)
-                .clickable(onClick = onBell),
-            contentAlignment = Alignment.Center,
-        ) {
-            AppIcon(Icons.Outlined.Notifications, tint = StudyHubColors.TextSecondary, size = 20.dp)
-        }
-        if (unread > 0) {
-            Box(
-                modifier = Modifier
-                    .size(17.dp)
-                    .clip(CircleShape)
-                    .background(StudyHubColors.Danger)
-                    .border(2.dp, StudyHubColors.Bg, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (unread > 9) "9+" else "$unread",
-                    color = Color.White,
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun DemoBanner() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(StudyHubColors.Accent.copy(alpha = 0.12f))
-            .border(1.dp, StudyHubColors.Accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(StudyHubColors.Peach)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(Icons.Outlined.SmartToy, tint = StudyHubColors.AccentLight, size = 16.dp)
+        AppIcon(Icons.Outlined.AutoAwesome, tint = StudyHubColors.Accent, size = 15.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             text = "Modo demo: inicia sesión para ver tus datos reales",
-            color = StudyHubColors.AccentLight,
-            fontSize = 12.sp,
+            color = StudyHubColors.AccentDark,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
         )
     }
@@ -223,13 +207,12 @@ private fun OfflineBanner(pending: Int, onRetry: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp, vertical = 6.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(StudyHubColors.Danger.copy(alpha = 0.14f))
-            .border(1.dp, StudyHubColors.Danger.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(StudyHubColors.Rose)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(Icons.Outlined.Notifications, tint = StudyHubColors.DangerLight, size = 16.dp)
+        AppIcon(Icons.Outlined.Notifications, tint = StudyHubColors.Danger, size = 15.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             text = if (pending > 0) {
@@ -238,15 +221,15 @@ private fun OfflineBanner(pending: Int, onRetry: () -> Unit) {
                 "Sin conexión · mostrando datos guardados"
             },
             color = StudyHubColors.DangerLight,
-            fontSize = 12.sp,
+            fontSize = 11.5.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = "Reintentar",
             color = StudyHubColors.DangerLight,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.ExtraBold,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onRetry)
@@ -255,18 +238,18 @@ private fun OfflineBanner(pending: Int, onRetry: () -> Unit) {
     }
 }
 
-// ─── Barra de navegación inferior (píldora de cristal) ─────────────────
+// ─── Barra de navegación inferior ──────────────────────────────────────
 
 @Composable
 private fun BottomNav(tab: AppTab, onSelect: (AppTab) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 10.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(StudyHubColors.Glass)
-            .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(24.dp))
-            .padding(6.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(StudyHubColors.Surface)
+            .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(26.dp))
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         AppTab.entries.forEach { item ->
@@ -275,28 +258,29 @@ private fun BottomNav(tab: AppTab, onSelect: (AppTab) -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(18.dp))
-                    .then(
-                        if (active) {
-                            Modifier.background(Brush.linearGradient(listOf(StudyHubColors.Primary, StudyHubColors.PrimaryDark)))
-                        } else {
-                            Modifier
-                        },
-                    )
                     .clickable { onSelect(item) }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 2.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AppIcon(
-                    icon = item.icon,
-                    tint = if (active) Color.White else StudyHubColors.TextSecondary,
-                    size = 22.dp,
-                )
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(if (active) StudyHubColors.SageSoft else Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AppIcon(
+                        icon = item.icon,
+                        tint = if (active) StudyHubColors.Primary else StudyHubColors.TextTertiary,
+                        size = 19.dp,
+                    )
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = item.label,
-                    color = if (active) Color.White else StudyHubColors.TextTertiary,
-                    fontSize = 10.sp,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                    color = if (active) StudyHubColors.Primary else StudyHubColors.TextTertiary,
+                    fontSize = 9.5.sp,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                 )
             }
         }
@@ -333,11 +317,11 @@ fun FullScreenBackBar(title: String, subtitle: String? = null, onBack: () -> Uni
                 .size(38.dp)
                 .clip(CircleShape)
                 .background(StudyHubColors.Surface)
-                .border(1.dp, StudyHubColors.Border, CircleShape)
+                .border(1.dp, StudyHubColors.GlassBorder, CircleShape)
                 .clickable(onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
-            AppIcon(Icons.AutoMirrored.Outlined.ArrowBack, tint = StudyHubColors.TextPrimary, size = 20.dp)
+            AppIcon(Icons.AutoMirrored.Outlined.ArrowBack, tint = StudyHubColors.TextPrimary, size = 19.dp)
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -345,13 +329,13 @@ fun FullScreenBackBar(title: String, subtitle: String? = null, onBack: () -> Uni
                 text = title,
                 color = StudyHubColors.TextPrimary,
                 fontSize = 17.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.SemiBold,
             )
             if (subtitle != null) {
                 Text(
                     text = subtitle,
                     color = StudyHubColors.TextTertiary,
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                 )
             }
         }
