@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,12 +37,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.SubcomposeAsyncImage
 import org.studyhub.project.StudyHubColors
+import org.studyhub.project.net.BASE_URL
 import org.studyhub.project.ui.icons.AppIcon
 
 // ─── Tarjeta blanca suave ───────────────────────────────────────────────
@@ -78,6 +82,7 @@ fun StudyHubTopBar(
     onBell: () -> Unit,
     userName: String,
     modifier: Modifier = Modifier,
+    userPhoto: String? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Row(
@@ -109,8 +114,9 @@ fun StudyHubTopBar(
         }
         NotificationBell(unread = unread, onBell = onBell)
         Spacer(Modifier.width(8.dp))
-        InitialsAvatar(
+        ProfileAvatar(
             name = userName,
+            photoUrl = userPhoto,
             size = 38.dp,
             gradient = listOf(StudyHubColors.HeroLight, StudyHubColors.Hero),
         )
@@ -620,6 +626,49 @@ fun GlassTextField(
     )
 }
 
+// ─── Avatar (foto remota con respaldo de iniciales) ─────────────────────
+
+/** Convierte la ruta relativa que devuelve el backend en una URL absoluta. */
+fun mediaUrl(path: String?): String? {
+    val clean = path?.trim().orEmpty()
+    if (clean.isEmpty()) return null
+    if (clean.startsWith("http://") || clean.startsWith("https://")) return clean
+    return BASE_URL + if (clean.startsWith("/")) clean else "/$clean"
+}
+
+@Composable
+fun ProfileAvatar(
+    name: String,
+    photoUrl: String?,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    gradient: List<Color> = listOf(StudyHubColors.Primary, StudyHubColors.PrimaryDark),
+    shape: androidx.compose.ui.graphics.Shape = CircleShape,
+) {
+    val url = mediaUrl(photoUrl)
+    if (url == null) {
+        InitialsAvatar(name = name, modifier = modifier, size = size, gradient = gradient, shape = shape)
+        return
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .background(StudyHubColors.SageSoft),
+        contentAlignment = Alignment.Center,
+    ) {
+        SubcomposeAsyncImage(
+            model = url,
+            contentDescription = "Foto de perfil de $name",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            loading = { InitialsAvatar(name = name, size = size, gradient = gradient, shape = shape) },
+            error = { InitialsAvatar(name = name, size = size, gradient = gradient, shape = shape) },
+        )
+    }
+}
+
 // ─── Avatar de iniciales ────────────────────────────────────────────────
 
 @Composable
@@ -628,6 +677,7 @@ fun InitialsAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
     gradient: List<Color> = listOf(StudyHubColors.Primary, StudyHubColors.PrimaryDark),
+    shape: androidx.compose.ui.graphics.Shape = CircleShape,
 ) {
     val initials = name
         .trim()
@@ -642,7 +692,7 @@ fun InitialsAvatar(
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
+            .clip(shape)
             .background(Brush.linearGradient(gradient)),
         contentAlignment = Alignment.Center,
     ) {

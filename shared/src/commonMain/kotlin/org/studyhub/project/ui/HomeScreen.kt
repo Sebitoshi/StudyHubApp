@@ -71,6 +71,7 @@ fun HomeScreen(
     onOpenSpace: (SpaceTarget) -> Unit,
     onOpenSubject: (Int, String, String) -> Unit,
     onOpenSubjects: () -> Unit,
+    photoUrl: String? = null,
 ) {
     val demo = remember { TokenStore.load() == null }
     var summary by remember { mutableStateOf<DashboardSummary?>(null) }
@@ -148,6 +149,7 @@ fun HomeScreen(
                     onOpenSubject = onOpenSubject,
                     onOpenSubjects = onOpenSubjects,
                     displayName = if (demo) DemoData.userName else (it.user?.nombre ?: "Estudiante"),
+                    photoUrl = photoUrl ?: it.user?.foto,
                 )
             }
         }
@@ -165,6 +167,7 @@ private fun DashboardContent(
     onOpenSubject: (Int, String, String) -> Unit,
     onOpenSubjects: () -> Unit,
     displayName: String,
+    photoUrl: String?,
 ) {
     val stats = data.stats
     val gamification = data.gamification
@@ -189,6 +192,7 @@ private fun DashboardContent(
             unread = unread,
             onBell = onBell,
             userName = displayName,
+            userPhoto = photoUrl,
         )
         Spacer(Modifier.height(18.dp))
 

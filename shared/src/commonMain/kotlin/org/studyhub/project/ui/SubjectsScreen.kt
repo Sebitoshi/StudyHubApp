@@ -81,6 +81,7 @@ fun SubjectsScreen(
     onBell: () -> Unit,
     userName: String,
     onOpenSpace: (SpaceTarget) -> Unit,
+    userPhoto: String? = null,
 ) {
     val demo = remember { TokenStore.load() == null }
     var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
@@ -168,6 +169,7 @@ fun SubjectsScreen(
                         unread = unread,
                         onBell = onBell,
                         userName = userName,
+                        userPhoto = userPhoto ?: summary?.user?.foto,
                     )
                     Spacer(Modifier.height(18.dp))
 

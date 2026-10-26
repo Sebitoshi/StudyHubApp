@@ -73,6 +73,7 @@ fun MainApp(onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(AppTab.HOME) }
     var fullScreen by remember { mutableStateOf<FullScreen?>(null) }
     var notifOpen by remember { mutableStateOf(false) }
+    var tutorChatOpen by remember { mutableStateOf(false) }
     var unread by remember { mutableStateOf(0) }
     var refreshTick by remember { mutableStateOf(0) }
 
@@ -80,6 +81,7 @@ fun MainApp(onLogout: () -> Unit) {
     val scope = rememberCoroutineScope()
 
     var userName by remember { mutableStateOf(if (demo) DemoData.userName else "Estudiante") }
+    var userPhoto by remember { mutableStateOf<String?>(null) }
     var offline by remember { mutableStateOf(!OfflineState.isOnline) }
     DisposableEffect(Unit) {
         OfflineState.onChanged = { offline = !OfflineState.isOnline }
@@ -98,6 +100,12 @@ fun MainApp(onLogout: () -> Unit) {
                 ?.nombre
                 ?.takeIf { it.isNotBlank() }
                 ?.let { userName = it }
+            runCatching { Api.client.personalInfo() }
+                .getOrNull()
+                ?.let { info ->
+                    info.nombre.takeIf { it.isNotBlank() }?.let { userName = it }
+                    userPhoto = info.foto
+                }
         }
     }
 
@@ -125,14 +133,22 @@ fun MainApp(onLogout: () -> Unit) {
                         onOpenSpace = { fullScreen = FullScreen.Space(it) },
                         onOpenSubject = { id, name, color -> fullScreen = FullScreen.SubjectDetail(id, name, color, AppTab.HOME) },
                         onOpenSubjects = { tab = AppTab.SUBJECTS },
+                        photoUrl = userPhoto,
                     )
-                    AppTab.AGENDA -> AgendaScreen()
+                    AppTab.AGENDA -> AgendaScreen(
+                        unread = unread,
+                        onBell = { notifOpen = true },
+                        userName = userName,
+                        userPhoto = userPhoto,
+                    )
                     AppTab.TUTOR -> TutorScreen(
                         unread = unread,
                         onBell = { notifOpen = true },
                         userName = userName,
+                        userPhoto = userPhoto,
                         onOpenSpace = { fullScreen = FullScreen.Space(it) },
                         onOpenSubjects = { tab = AppTab.SUBJECTS },
+                        onChatVisibilityChanged = { tutorChatOpen = it },
                     )
                     AppTab.SUBJECTS -> SubjectsScreen(
                         onOpenDetail = { id, name, color -> fullScreen = FullScreen.SubjectDetail(id, name, color, AppTab.SUBJECTS) },
@@ -140,14 +156,20 @@ fun MainApp(onLogout: () -> Unit) {
                         onBell = { notifOpen = true },
                         userName = userName,
                         onOpenSpace = { fullScreen = FullScreen.Space(it) },
+                        userPhoto = userPhoto,
                     )
                     AppTab.PROFILE -> ProfileScreen(
                         onLogout = onLogout,
                         onOpenSpace = { fullScreen = FullScreen.Space(it) },
+                        photoUrl = userPhoto,
+                        unread = unread,
+                        onBell = { notifOpen = true },
                     )
                 }
             }
-            BottomNav(tab = tab, onSelect = { tab = it })
+            if (!(tab == AppTab.TUTOR && tutorChatOpen)) {
+                BottomNav(tab = tab, onSelect = { tab = it })
+            }
         }
 
         val current = fullScreen

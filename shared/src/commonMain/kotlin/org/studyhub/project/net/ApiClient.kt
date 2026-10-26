@@ -10,8 +10,11 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.delete
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
@@ -20,6 +23,8 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
@@ -300,6 +305,10 @@ class ApiClient(engine: HttpClientEngine? = null) {
     // ─── Dashboard ───────────────────────────────────────────────────────
     suspend fun dashboard(): DashboardSummary = request("dashboard") {
         client.get("/dashboard/summary") { header("Authorization", auth()) }
+    }
+
+    suspend fun personalInfo(): PersonalInfo = request("profile/personal") {
+        client.get("/profile/personal") { header("Authorization", auth()) }
     }
 
     // ─── Materias ────────────────────────────────────────────────────────
@@ -758,6 +767,72 @@ class ApiClient(engine: HttpClientEngine? = null) {
             header("Authorization", auth())
             contentType(ContentType.Application.Json)
             setBody(ChatRequest(conversationId, teacherId, message))
+        }
+    })
+
+    // ─── Tutor IA: imágenes ──────────────────────────────────────────────
+    /**
+     * Fase 1 del pipeline de visión: sube la imagen y obtiene el contenido
+     * estructurado que luego se usa para conversar con el tutor.
+     * El backend solo acepta JPEG/PNG/WebP de hasta 6 MB.
+     */
+    suspend fun analyzeImage(
+        bytes: ByteArray,
+        filename: String,
+        mimeType: String,
+        idioma: String = "es",
+        enfoque: String? = null,
+    ): ImageAnalysisResponse = mutate(block = {
+        withNetworkRetry {
+            client.post("/ai/images/content") {
+                header("Authorization", auth())
+                parameter("idioma", idioma)
+                if (!enfoque.isNullOrBlank()) parameter("enfoque", enfoque)
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append(
+                                "image",
+                                bytes,
+                                Headers.build {
+                                    append(HttpHeaders.ContentType, mimeType)
+                                    append(
+                                        HttpHeaders.ContentDisposition,
+                                        "filename=\"${filename.replace("\"", "")}\"",
+                                    )
+                                },
+                            )
+                        },
+                    ),
+                )
+            }
+        }
+    })
+
+    /** Conversa con el tutor a partir del contenido ya extraído de una imagen. */
+    suspend fun chatWithImage(
+        message: String,
+        filename: String,
+        contenido: ImageContentPhase,
+        conversationId: String? = null,
+        teacherId: String? = null,
+        nivel: String = "default",
+    ): ChatResponse = mutate(block = {
+        withNetworkRetry {
+            client.post("/ai/chat/image") {
+                header("Authorization", auth())
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ChatWithImageRequest(
+                        conversationId = conversationId,
+                        teacherId = teacherId,
+                        message = message,
+                        filename = filename,
+                        contenido = contenido,
+                        nivel = nivel,
+                    ),
+                )
+            }
         }
     })
 

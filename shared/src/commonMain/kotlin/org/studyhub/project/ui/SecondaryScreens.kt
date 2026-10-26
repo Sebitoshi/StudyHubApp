@@ -637,12 +637,7 @@ internal fun CalendarScreen(onBack: () -> Unit, embedded: Boolean = false) {
     }
 }
 
-/** Pestaña Agenda: el calendario sin barra de volver. */
-@Composable
-fun AgendaScreen() {
-    CalendarScreen(onBack = {}, embedded = true)
-}
-
+/** Pestaña Agenda: vista semanal del nuevo diseño. */
 private data class CalItem(
     val title: String,
     val startAt: String,
@@ -709,7 +704,7 @@ private fun timeOf(iso: String): String {
 }
 
 @Composable
-private fun EditEventScreen(
+internal fun EditEventScreen(
     event: CalendarEvent,
     onBack: () -> Unit,
     onDone: () -> Unit,
@@ -736,7 +731,11 @@ private fun EditEventScreen(
     val canSave = title.isNotBlank() && date.length == 10 && isValidTime(startTime) && timesValid && !saving
 
     Column(Modifier.fillMaxSize()) {
-        FullScreenBackBar("Editar ${if (type == "EXAM") "examen" else "evento"}", "Toca los campos para modificarlo", onBack)
+        FullScreenBackBar(
+            if (event.id == 0) "Nuevo evento" else "Editar ${if (type == "EXAM") "examen" else "evento"}",
+            if (event.id == 0) "Completa los datos para agendarlo" else "Toca los campos para modificarlo",
+            onBack,
+        )
         Column(
             Modifier
                 .fillMaxSize()
@@ -855,7 +854,7 @@ private fun EditEventScreen(
             }
             Spacer(Modifier.height(20.dp))
             PrimaryButton(
-                text = "Guardar cambios",
+                text = if (event.id == 0) "Crear evento" else "Guardar cambios",
                 icon = Icons.Outlined.Save,
                 enabled = canSave,
                 loading = saving,
@@ -864,16 +863,18 @@ private fun EditEventScreen(
                 scope.launch {
                     try {
                         val end = if (endTime.isNotBlank()) "$date" + "T$endTime:00.000Z" else ""
-                        Api.client.updateCalendarEvent(
-                            id = event.id,
-                            request = CalendarEventRequest(
-                                title = title.trim(),
-                                startAt = "$date" + "T$startTime:00.000Z",
-                                endAt = end,
-                                type = type,
-                                subjectId = subjectId,
-                            ),
+                        val request = CalendarEventRequest(
+                            title = title.trim(),
+                            startAt = "$date" + "T$startTime:00.000Z",
+                            endAt = end,
+                            type = type,
+                            subjectId = subjectId,
                         )
+                        if (event.id == 0) {
+                            Api.client.createCalendarEvent(request)
+                        } else {
+                            Api.client.updateCalendarEvent(id = event.id, request = request)
+                        }
                         onDone()
                     } catch (e: Exception) {
                         error = e.message ?: "No se pudo guardar el evento"
@@ -882,62 +883,64 @@ private fun EditEventScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            if (!confirmDelete) {
-                Text(
-                    text = "Eliminar ${if (type == "EXAM") "examen" else "evento"}",
-                    color = StudyHubColors.DangerLight,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(StudyHubColors.DangerLight.copy(alpha = 0.10f))
-                        .clickable { confirmDelete = true }
-                        .padding(vertical = 12.dp),
-                )
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (event.id != 0) {
+                Spacer(Modifier.height(10.dp))
+                if (!confirmDelete) {
                     Text(
-                        text = "Cancelar",
-                        color = StudyHubColors.TextSecondary,
+                        text = "Eliminar ${if (type == "EXAM") "examen" else "evento"}",
+                        color = StudyHubColors.DangerLight,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(StudyHubColors.Surface)
-                            .clickable { confirmDelete = false }
+                            .background(StudyHubColors.DangerLight.copy(alpha = 0.10f))
+                            .clickable { confirmDelete = true }
                             .padding(vertical = 12.dp),
                     )
-                    Text(
-                        text = if (deleting) "Eliminando…" else "Sí, eliminar",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(StudyHubColors.DangerLight)
-                            .clickable(enabled = !deleting) {
-                                deleting = true
-                                scope.launch {
-                                    try {
-                                        Api.client.deleteCalendarEvent(event.id)
-                                        onDone()
-                                    } catch (e: Exception) {
-                                        error = e.message ?: "No se pudo eliminar el evento"
-                                        confirmDelete = false
-                                    } finally {
-                                        deleting = false
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Cancelar",
+                            color = StudyHubColors.TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(StudyHubColors.Surface)
+                                .clickable { confirmDelete = false }
+                                .padding(vertical = 12.dp),
+                        )
+                        Text(
+                            text = if (deleting) "Eliminando…" else "Sí, eliminar",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(StudyHubColors.DangerLight)
+                                .clickable(enabled = !deleting) {
+                                    deleting = true
+                                    scope.launch {
+                                        try {
+                                            Api.client.deleteCalendarEvent(event.id)
+                                            onDone()
+                                        } catch (e: Exception) {
+                                            error = e.message ?: "No se pudo eliminar el evento"
+                                            confirmDelete = false
+                                        } finally {
+                                            deleting = false
+                                        }
                                     }
                                 }
-                            }
-                            .padding(vertical = 12.dp),
-                    )
+                                .padding(vertical = 12.dp),
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

@@ -7,14 +7,19 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,8 +31,10 @@ import androidx.compose.material.icons.outlined.AddComment
 import androidx.compose.material.icons.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.NoteAlt
 import androidx.compose.material.icons.outlined.Quiz
 import androidx.compose.material.icons.outlined.Search
@@ -48,9 +55,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.SubcomposeAsyncImage
 import kotlinx.coroutines.launch
 import org.studyhub.project.StudyHubColors
 import org.studyhub.project.net.Api
@@ -62,7 +72,12 @@ import org.studyhub.project.ui.icons.AppIcon
 private const val KEY_TEACHER = "studyhub_teacher_id"
 private const val KEY_CONVERSATION = "studyhub_conversation_id"
 
-private data class ChatUiMessage(val role: String, val content: String)
+private data class ChatUiMessage(
+    val role: String,
+    val content: String,
+    val imageBytes: ByteArray? = null,
+    val imageName: String? = null,
+)
 
 private val SUGGESTIONS = listOf(
     "Explícame un tema que no entiendo",
@@ -78,8 +93,10 @@ fun TutorScreen(
     unread: Int,
     onBell: () -> Unit,
     userName: String,
+    userPhoto: String?,
     onOpenSpace: (SpaceTarget) -> Unit,
     onOpenSubjects: () -> Unit,
+    onChatVisibilityChanged: (Boolean) -> Unit = {},
 ) {
     val demo = remember { TokenStore.load() == null }
     var messages by remember { mutableStateOf(listOf<ChatUiMessage>()) }
@@ -95,8 +112,21 @@ fun TutorScreen(
     var showChat by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf("Todo") }
     var search by remember { mutableStateOf("") }
+    var pendingImage by remember { mutableStateOf<PickedImage?>(null) }
+    var analyzingImage by remember { mutableStateOf(false) }
+    val canPickImages = remember { imagePickerSupported() }
+    val pickImage = rememberImagePicker { picked -> pendingImage = picked }
     val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
+    val listState = rememberLazyListState()
+
+    // El chat ocupa toda la pantalla: MainApp esconde la barra inferior mientras está abierto.
+    LaunchedEffect(showChat) {
+        onChatVisibilityChanged(showChat)
+    }
+    PlatformBackHandler(enabled = showChat) {
+        showChat = false
+        pendingImage = null
+    }
 
     LaunchedEffect(Unit) {
         if (demo) return@LaunchedEffect
@@ -119,8 +149,16 @@ fun TutorScreen(
             .filter { it.active }
     }
 
-    LaunchedEffect(messages.size, typing) {
-        scrollState.animateScrollTo(scrollState.maxValue)
+    LaunchedEffect(messages.size, typing, showChat, tab) {
+        if (!showChat || tab != TutorTab.CHAT || messages.isEmpty()) return@LaunchedEffect
+        // Al llegar una respuesta larga, mostrarla desde el inicio; al enviar,
+        // bajar hasta el indicador de escritura para dejar ver el mensaje propio.
+        val target = if (messages.last().role == "assistant") {
+            messages.lastIndex
+        } else {
+            messages.lastIndex + if (typing) 1 else 0
+        }
+        listState.animateScrollToItem(target)
     }
 
     // Cargar historial al abrir la pestaña
@@ -170,20 +208,54 @@ fun TutorScreen(
         }
     }
 
-    fun send(text: String) {
+    fun send(text: String, image: PickedImage? = null) {
         val trimmed = text.trim()
-        if (trimmed.isEmpty() || typing) return
-        messages = messages + ChatUiMessage("user", trimmed)
+        if ((trimmed.isEmpty() && image == null) || typing) return
+        val question = trimmed.ifBlank { "Analiza esta imagen y explícame lo que ves." }
+        messages = messages + ChatUiMessage(
+            role = "user",
+            content = question,
+            imageBytes = image?.bytes,
+            imageName = image?.filename,
+        )
         input = ""
+        pendingImage = null
         typing = true
+        analyzingImage = image != null
         if (demo) {
-            messages = messages + ChatUiMessage("assistant", DemoData.replyFor(trimmed))
+            messages = messages + ChatUiMessage(
+                "assistant",
+                if (image != null) {
+                    "En el modo demo no puedo analizar imágenes, pero con tu cuenta real sí puedo. " +
+                        "Mientras tanto, cuéntame qué materia o ejercicio aparece y te ayudo."
+                } else {
+                    DemoData.replyFor(question)
+                },
+            )
             typing = false
+            analyzingImage = false
             return
         }
         scope.launch {
             try {
-                val response = Api.client.chat(trimmed, conversationId, teacherId)
+                val response = if (image != null) {
+                    // Fase 1: visión extrae el contenido de la imagen; luego el tutor
+                    // conversa sobre ese contenido (el backend ya no reenvía la imagen).
+                    val analysis = Api.client.analyzeImage(
+                        bytes = image.bytes,
+                        filename = image.filename,
+                        mimeType = image.mimeType,
+                    )
+                    Api.client.chatWithImage(
+                        message = question,
+                        filename = image.filename,
+                        contenido = analysis.contenido,
+                        conversationId = conversationId,
+                        teacherId = teacherId,
+                    )
+                } else {
+                    Api.client.chat(question, conversationId, teacherId)
+                }
                 conversationId = response.conversationId.ifBlank { conversationId }
                 conversationId?.let { TokenStore.saveString(KEY_CONVERSATION, it) }
                 val reply = response.reply.ifBlank { "No pude generar una respuesta." }
@@ -195,6 +267,7 @@ fun TutorScreen(
                 )
             } finally {
                 typing = false
+                analyzingImage = false
             }
         }
     }
@@ -210,6 +283,7 @@ fun TutorScreen(
             unread = unread,
             onBell = onBell,
             userName = userName,
+            userPhoto = userPhoto,
             search = search,
             onSearchChange = { search = it },
             onSearch = { if (search.isNotBlank()) openChat(search) },
@@ -242,7 +316,10 @@ fun TutorScreen(
                     .clip(RoundedCornerShape(12.dp))
                     .background(StudyHubColors.Surface)
                     .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(12.dp))
-                    .clickable { showChat = false },
+                    .clickable {
+                        showChat = false
+                        pendingImage = null
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 AppIcon(Icons.AutoMirrored.Outlined.ArrowBack, tint = StudyHubColors.TextPrimary, size = 18.dp)
@@ -296,8 +373,8 @@ fun TutorScreen(
             }
         }
 
-        // Selector de profesor IA (solo en el chat)
-        if (tab == TutorTab.CHAT && teachers.isNotEmpty()) {
+        // Selector de profesor IA (solo antes de empezar a conversar)
+        if (tab == TutorTab.CHAT && teachers.isNotEmpty() && messages.isEmpty()) {
             ProfessorSelector(
                 teachers = teachers,
                 selectedId = teacherId,
@@ -308,8 +385,10 @@ fun TutorScreen(
             )
         }
 
-        // Pestañas Chat / Quizzes
-        TutorTabs(current = tab, onSelect = { tab = it })
+        // Pestañas Chat / Quizzes (se ocultan al conversar para dar espacio a los mensajes)
+        if (tab != TutorTab.CHAT || messages.isEmpty()) {
+            TutorTabs(current = tab, onSelect = { tab = it })
+        }
 
         Box(Modifier.weight(1f)) {
             if (tab == TutorTab.QUIZZES) {
@@ -331,49 +410,60 @@ fun TutorScreen(
                     },
                 )
             } else {
-                Column(
-                    Modifier
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(scrollState)
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp),
                 ) {
                     if (messages.isEmpty()) {
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            text = "Hola, soy tu tutor de estudio con IA. Pregúntame dudas, pídeme un plan, un simulacro o una explicación paso a paso.",
-                            color = StudyHubColors.TextSecondary,
-                            fontSize = 13.sp,
-                            lineHeight = 19.sp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(StudyHubColors.Surface)
-                                .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(18.dp))
-                                .padding(14.dp),
-                        )
-                        Spacer(Modifier.height(18.dp))
-                        Text("Sugerencias", color = StudyHubColors.TextTertiary, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(10.dp))
-                        SUGGESTIONS.forEach { s ->
-                            GlassChip(
-                                text = s,
-                                selected = false,
-                                onClick = { send(s) },
-                                modifier = Modifier.padding(bottom = 8.dp),
-                            )
+                        item {
+                            Column {
+                                Spacer(Modifier.height(14.dp))
+                                Text(
+                                    text = "Hola, soy tu tutor de estudio con IA. Pregúntame dudas, pídeme un plan, un simulacro o una explicación paso a paso. También puedes adjuntar una foto de tus apuntes o de un ejercicio y la analizo contigo.",
+                                    color = StudyHubColors.TextSecondary,
+                                    fontSize = 13.sp,
+                                    lineHeight = 19.sp,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(StudyHubColors.Surface)
+                                        .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(18.dp))
+                                        .padding(14.dp),
+                                )
+                                Spacer(Modifier.height(18.dp))
+                                Text("Sugerencias", color = StudyHubColors.TextTertiary, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(10.dp))
+                                SUGGESTIONS.forEach { s ->
+                                    GlassChip(
+                                        text = s,
+                                        selected = false,
+                                        onClick = { send(s) },
+                                        modifier = Modifier.padding(bottom = 8.dp),
+                                    )
+                                }
+                            }
                         }
                     } else {
-                        messages.forEach { msg ->
+                        itemsIndexed(messages) { _, msg ->
                             MessageBubble(msg)
                         }
                         if (typing) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(top = 8.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(StudyHubColors.Surface)
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                            ) {
-                                Text("Escribiendo…", color = StudyHubColors.TextTertiary, fontSize = 12.5.sp)
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(top = 8.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(StudyHubColors.Surface)
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                ) {
+                                    Text(
+                                        if (analyzingImage) "Analizando imagen…" else "Escribiendo…",
+                                        color = StudyHubColors.TextTertiary,
+                                        fontSize = 12.5.sp,
+                                    )
+                                }
                             }
                         }
                     }
@@ -383,6 +473,13 @@ fun TutorScreen(
 
         // Entrada (solo en el chat)
         if (tab == TutorTab.CHAT) {
+            pendingImage?.let { image ->
+                PendingImageCard(
+                    image = image,
+                    onRemove = { pendingImage = null },
+                )
+            }
+            val canSend = input.isNotBlank() || pendingImage != null
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -393,6 +490,19 @@ fun TutorScreen(
                     .padding(horizontal = 6.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (canPickImages) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(StudyHubColors.SageSoft)
+                            .clickable(enabled = !typing) { pickImage() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AppIcon(Icons.Outlined.Image, tint = StudyHubColors.Primary, size = 18.dp)
+                    }
+                    Spacer(Modifier.width(2.dp))
+                }
                 androidx.compose.foundation.text.BasicTextField(
                     value = input,
                     onValueChange = { input = it },
@@ -406,7 +516,11 @@ fun TutorScreen(
                     singleLine = true,
                     decorationBox = { inner ->
                         if (input.isEmpty()) {
-                            Text("Escribe tu pregunta…", color = StudyHubColors.TextTertiary, fontSize = 14.sp)
+                            Text(
+                                if (pendingImage != null) "Pregunta sobre la imagen…" else "Escribe tu pregunta…",
+                                color = StudyHubColors.TextTertiary,
+                                fontSize = 14.sp,
+                            )
                         }
                         inner()
                     },
@@ -415,8 +529,11 @@ fun TutorScreen(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(StudyHubColors.Primary)
-                        .clickable { send(input) },
+                        .background(
+                            if (canSend) StudyHubColors.Primary
+                            else StudyHubColors.Primary.copy(alpha = 0.35f),
+                        )
+                        .clickable(enabled = canSend && !typing) { send(input, pendingImage) },
                     contentAlignment = Alignment.Center,
                 ) {
                     AppIcon(Icons.AutoMirrored.Outlined.Send, tint = Color.White, size = 19.dp)
@@ -445,6 +562,7 @@ private fun TutorHub(
     unread: Int,
     onBell: () -> Unit,
     userName: String,
+    userPhoto: String?,
     search: String,
     onSearchChange: (String) -> Unit,
     onSearch: () -> Unit,
@@ -538,6 +656,7 @@ private fun TutorHub(
             unread = unread,
             onBell = onBell,
             userName = userName,
+            userPhoto = userPhoto,
         )
         Spacer(Modifier.height(18.dp))
 
@@ -1006,6 +1125,74 @@ private fun HistoryList(
 }
 
 @Composable
+private fun PendingImageCard(image: PickedImage, onRemove: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(StudyHubColors.SageSoft)
+            .border(1.dp, StudyHubColors.GlassBorder, RoundedCornerShape(16.dp))
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PickedImageThumb(
+            bytes = image.bytes,
+            modifier = Modifier
+                .size(46.dp)
+                .clip(RoundedCornerShape(11.dp)),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                image.filename,
+                color = StudyHubColors.TextPrimary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text("Listo para analizar", color = StudyHubColors.TextSecondary, fontSize = 10.5.sp)
+        }
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(StudyHubColors.Surface)
+                .clickable { onRemove() },
+            contentAlignment = Alignment.Center,
+        ) {
+            AppIcon(Icons.Outlined.Close, tint = StudyHubColors.TextSecondary, size = 14.dp)
+        }
+    }
+}
+
+@Composable
+private fun PickedImageThumb(bytes: ByteArray, modifier: Modifier = Modifier) {
+    SubcomposeAsyncImage(
+        model = bytes,
+        contentDescription = "Imagen adjunta",
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+        loading = { ImageThumbFallback() },
+        error = { ImageThumbFallback() },
+    )
+}
+
+@Composable
+private fun ImageThumbFallback() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(StudyHubColors.SageSoft),
+        contentAlignment = Alignment.Center,
+    ) {
+        AppIcon(Icons.Outlined.Image, tint = StudyHubColors.Primary, size = 18.dp)
+    }
+}
+
+@Composable
 private fun MessageBubble(msg: ChatUiMessage) {
     val isUser = msg.role == "user"
     val shape = RoundedCornerShape(
@@ -1028,12 +1215,24 @@ private fun MessageBubble(msg: ChatUiMessage) {
                 .border(1.dp, if (isUser) Color.Transparent else StudyHubColors.GlassBorder, shape)
                 .padding(horizontal = 14.dp, vertical = 11.dp),
         ) {
-            RichText(
-                text = msg.content,
-                color = if (isUser) Color.White else StudyHubColors.TextPrimary,
-                fontSize = 13.5.sp,
-                lineHeight = 19.sp,
-            )
+            Column {
+                msg.imageBytes?.let { bytes ->
+                    PickedImageThumb(
+                        bytes = bytes,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                RichText(
+                    text = msg.content,
+                    color = if (isUser) Color.White else StudyHubColors.TextPrimary,
+                    fontSize = 13.5.sp,
+                    lineHeight = 19.sp,
+                )
+            }
         }
     }
 }

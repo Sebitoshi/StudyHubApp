@@ -118,6 +118,19 @@ data class User(
     val nombre: String = "",
     val apellido: String = "",
     val email: String = "",
+    val foto: String? = null,
+)
+
+/** Respuesta de GET /profile/personal (incluye la foto de perfil). */
+@Serializable
+data class PersonalInfo(
+    val id: Int = 0,
+    val nombre: String = "",
+    val apellido: String = "",
+    val email: String = "",
+    val foto: String? = null,
+    val ciudad: String? = null,
+    val pais: String? = null,
 )
 
 // ─── Dashboard ──────────────────────────────────────────────────────────
@@ -140,7 +153,11 @@ data class DashboardSummary(
 )
 
 @Serializable
-data class DashboardUser(val id: Int = 0, val nombre: String = "")
+data class DashboardUser(
+    val id: Int = 0,
+    val nombre: String = "",
+    val foto: String? = null,
+)
 
 @Serializable
 data class DashboardStats(
@@ -474,6 +491,48 @@ data class ChatRequest(
     @SerialName("conversationId") val conversationId: String? = null,
     @SerialName("teacherId") val teacherId: String? = null,
     val message: String = "",
+)
+
+// ─── Análisis de imágenes del tutor IA ─────────────────────────────────
+
+/** Fase 1: contenido que el modelo de visión extrae de una imagen. */
+@Serializable
+data class ImageContentPhase(
+    val titulo: String = "",
+    val tipoContenido: String = "",
+    val tema: String = "",
+    val nivelDificultad: String = "",
+    val contenidoPrincipal: String = "",
+    val textoDetectado: String = "",
+    val elementosClave: List<String> = emptyList(),
+    val advertencias: List<String> = emptyList(),
+)
+
+@Serializable
+data class ImagePhaseMeta(
+    val fase: Int = 1,
+    val modelo: String = "",
+    @SerialName("duracionMs") val duracionMs: Long = 0,
+    @SerialName("tokensUsados") val tokensUsados: Int? = null,
+)
+
+/** Respuesta de POST /ai/images/content. */
+@Serializable
+data class ImageAnalysisResponse(
+    val fase: Int = 1,
+    val contenido: ImageContentPhase = ImageContentPhase(),
+    val meta: ImagePhaseMeta? = null,
+)
+
+/** Cuerpo de POST /ai/chat/image (la imagen ya fue analizada por visión). */
+@Serializable
+data class ChatWithImageRequest(
+    @SerialName("conversationId") val conversationId: String? = null,
+    @SerialName("teacherId") val teacherId: String? = null,
+    val message: String = "",
+    val filename: String = "",
+    val contenido: ImageContentPhase = ImageContentPhase(),
+    val nivel: String = "default",
 )
 
 @Serializable
