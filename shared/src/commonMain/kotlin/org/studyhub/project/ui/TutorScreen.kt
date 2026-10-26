@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,7 +101,7 @@ fun TutorScreen(
 ) {
     val demo = remember { TokenStore.load() == null }
     var messages by remember { mutableStateOf(listOf<ChatUiMessage>()) }
-    var input by remember { mutableStateOf("") }
+    var input by remember { mutableStateOf(TextFieldValue("")) }
     var typing by remember { mutableStateOf(false) }
     var conversationId by remember { mutableStateOf<String?>(null) }
     var teachers by remember { mutableStateOf<List<TeacherProfile>>(emptyList()) }
@@ -218,7 +219,7 @@ fun TutorScreen(
             imageBytes = image?.bytes,
             imageName = image?.filename,
         )
-        input = ""
+        input = TextFieldValue("")
         pendingImage = null
         typing = true
         analyzingImage = image != null
@@ -479,7 +480,7 @@ fun TutorScreen(
                     onRemove = { pendingImage = null },
                 )
             }
-            val canSend = input.isNotBlank() || pendingImage != null
+            val canSend = input.text.isNotBlank() || pendingImage != null
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -515,7 +516,7 @@ fun TutorScreen(
                     ),
                     singleLine = true,
                     decorationBox = { inner ->
-                        if (input.isEmpty()) {
+                        if (input.text.isEmpty()) {
                             Text(
                                 if (pendingImage != null) "Pregunta sobre la imagen…" else "Escribe tu pregunta…",
                                 color = StudyHubColors.TextTertiary,
@@ -533,7 +534,7 @@ fun TutorScreen(
                             if (canSend) StudyHubColors.Primary
                             else StudyHubColors.Primary.copy(alpha = 0.35f),
                         )
-                        .clickable(enabled = canSend && !typing) { send(input, pendingImage) },
+                        .clickable(enabled = canSend && !typing) { send(input.text, pendingImage) },
                     contentAlignment = Alignment.Center,
                 ) {
                     AppIcon(Icons.AutoMirrored.Outlined.Send, tint = Color.White, size = 19.dp)
